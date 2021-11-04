@@ -1,0 +1,4 @@
+rootProject.name = 'chiwawa-fsm'
+include 'chiwawa-fsm-api'
+include 'chiwawa-fsm-core'
+
