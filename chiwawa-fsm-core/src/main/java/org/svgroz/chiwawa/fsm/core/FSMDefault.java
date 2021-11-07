@@ -2,13 +2,15 @@ package org.svgroz.chiwawa.fsm.core;
 
 import org.svgroz.chiwawa.fsm.api.FSM;
 import org.svgroz.chiwawa.fsm.api.GetState;
+import org.svgroz.chiwawa.fsm.api.Entity;
+import org.svgroz.chiwawa.fsm.api.State;
 import org.svgroz.chiwawa.fsm.api.Transition;
 
+import java.lang.annotation.Annotation;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Method;
-import java.lang.reflect.Parameter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -19,7 +21,12 @@ import java.util.Map;
  * @author Simon Grozovsky svgroz@outlook.com
  */
 public class FSMDefault<T> implements FSM<T> {
-    private record TransitionGuardMethod(MethodHandle guard, MethodHandle transition) {
+    private record TransitionGuardMethod(
+            MethodHandle guard,
+            MethodHandle transition,
+            int entityParameterIndex,
+            int stateParameterIndex
+    ) {
     }
 
     private final Map<String, MethodHandle> getStates;
@@ -111,6 +118,11 @@ public class FSMDefault<T> implements FSM<T> {
                 throw new IllegalArgumentException(annotatedFSMClass + " does not contains method " + transactionAnnotationValue);
             }
 
+            int entityIndex = annotationIndex(targetMethod, Entity.class);
+            entityIndex = entityIndex == -1 ? 0 : entityIndex;
+            int stateIndex = annotationIndex(targetMethod, State.class);
+            stateIndex = stateIndex == -1 ? 1 : stateIndex;
+
             try {
                 transitions
                         .computeIfAbsent(
@@ -142,7 +154,9 @@ public class FSMDefault<T> implements FSM<T> {
                                                 )
                                                 .bindTo(
                                                         annotatedFSM
-                                                )
+                                                ),
+                                        entityIndex,
+                                        stateIndex
                                 )
                         );
             } catch (NoSuchMethodException | IllegalAccessException ex) {
@@ -151,6 +165,16 @@ public class FSMDefault<T> implements FSM<T> {
         }
 
         return transitions;
+    }
+
+    private int annotationIndex(final Method targetMethod, final Class<? extends Annotation> annotation) {
+        final var parameters = targetMethod.getParameters();
+        for (int i = 0; i < parameters.length; i++) {
+            if (parameters[i].getAnnotation(annotation) != null) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     @Override
@@ -172,7 +196,7 @@ public class FSMDefault<T> implements FSM<T> {
                 }
 
                 if (transit) {
-                    var args = prepareTransitionArgs(target, transition, context);
+                    var args = prepareTransitionArgs(target, transition, transitionGuardMethod, context);
                     try {
                         transitionGuardMethod.transition.invokeWithArguments(args);
                     } catch (Throwable ex) {
@@ -186,15 +210,31 @@ public class FSMDefault<T> implements FSM<T> {
         return null;
     }
 
-    private Object[] prepareTransitionArgs(Object target, Object transition, Object... context) {
+    private Object[] prepareTransitionArgs(
+            final Object entity,
+            final Object transition,
+            final TransitionGuardMethod transitionGuardMethod,
+            final Object... context
+    ) {
         if (context == null || context.length == 0) {
-            return new Object[]{target, transition};
+            final var args = new Object[2];
+            args[transitionGuardMethod.entityParameterIndex] = entity;
+            args[transitionGuardMethod.stateParameterIndex] = transition;
+            return args;
         }
 
-        var args = new Object[2 + context.length];
-        args[0] = target;
-        args[1] = transition;
-        System.arraycopy(context, 0, args, 2, context.length);
+        final var args = new Object[2 + context.length];
+        int contextIndex = 0;
+        for (int i = 0; i < args.length; i++) {
+            if (i == transitionGuardMethod.entityParameterIndex) {
+                args[i] = entity;
+            } else if (i == transitionGuardMethod.stateParameterIndex) {
+                args[i] = transition;
+            } else {
+                args[i] = context[contextIndex];
+                contextIndex = contextIndex + 1;
+            }
+        }
 
         return args;
     }

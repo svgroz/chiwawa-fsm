@@ -1,8 +1,12 @@
 package org.svgroz.chiwawa.fsm.core;
 
 import org.junit.jupiter.api.Test;
+import org.svgroz.chiwawa.fsm.api.Entity;
 import org.svgroz.chiwawa.fsm.api.GetState;
+import org.svgroz.chiwawa.fsm.api.State;
 import org.svgroz.chiwawa.fsm.api.Transition;
+
+import java.lang.annotation.Target;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -71,7 +75,7 @@ class FSMDefaultTest {
             return "bar".equals(state) && "foo".equalsIgnoreCase(transition);
         }
 
-        public TestTarget6 transit(TestTarget6 target, String state, int x) {
+        public TestTarget6 transit(@State String state, int x, @Entity TestTarget6 target) {
             target.setState(state);
             return target;
         }
